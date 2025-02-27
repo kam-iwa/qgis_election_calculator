@@ -25,14 +25,14 @@
 import os
 from enum import Enum
 
-from qgis.core import (Qgis, QgsMapLayerProxyModel, QgsFieldProxyModel, QgsAggregateCalculator, QgsVectorLayer,
+from qgis.core import (Qgis, QgsMapLayer, QgsMapLayerProxyModel, QgsFieldProxyModel, QgsAggregateCalculator, QgsVectorLayer,
                        QgsProject, QgsFeature, QgsField)
 from qgis.PyQt import QtWidgets, uic
 from qgis.PyQt.QtWidgets import QTableWidgetItem
 from qgis.PyQt.QtCore import pyqtSignal, Qt, QVariant
 from qgis.utils import iface
 
-from .election_calculator_methods import method_dhondt, method_sainte_lague, method_hare_niemeyer
+from .election_calculator_methods import ElectionCalculatorSeatsDistributor
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'election_calculator_dockwidget_base.ui'))
@@ -50,8 +50,99 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         """Constructor."""
         super(ElectionCalculatorDockWidget, self).__init__(parent)
         self.setupUi(self)
+        self._init_ui()
+        self._init_signals()
 
-        # INIT UI
+    def signal_on_dataLayerComboBox_layer_changed(self, layer):
+        if layer is not None:
+            field_names = layer.fields().names()
+
+            self.voteCountComboBox.clear()
+            self.voteCountComboBox.addItems(field_names)
+            self.constituencyVoteCountComboBox.setLayer(layer)
+
+        else:
+            self.voteCountComboBox.clear()
+            self.constituencyVoteCountComboBox.setLayer(None)
+
+    def signal_on_voteCountComboBox_fields_changed(self, fields):
+        self.multiThresholdTableWidget.clear()
+        self.multiThresholdTableWidget.setRowCount(len(fields))
+        for idx, field in enumerate(fields):
+            self.multiThresholdTableWidget.setItem(idx, 0, QTableWidgetItem(field))
+            self.multiThresholdTableWidget.item(idx, 0).setFlags(Qt.NoItemFlags)
+            self.multiThresholdTableWidget.setItem(idx, 1, QTableWidgetItem('0'))
+
+    def signal_on_thresholdCheckBox_check_state_changed(self, checked):
+        if checked:
+            self.oneThresholdWidget.setEnabled(True)
+            self.oneThresholdWidget.setVisible(True)
+
+            self.multiThresholdWidget.setEnabled(True)
+            self.multiThresholdWidget.setVisible(True)
+        else:
+            self.oneThresholdWidget.setEnabled(False)
+            self.oneThresholdWidget.setVisible(False)
+
+            self.multiThresholdWidget.setEnabled(False)
+            self.multiThresholdWidget.setVisible(False)
+
+    def signal_on_radioButton_change_clicked(self, id: int):
+        if id == 0:
+            self.oneThresholdSpinBox.setEnabled(True)
+            self.multiThresholdTableWidget.setEnabled(False)
+        else:
+            self.oneThresholdSpinBox.setEnabled(False)
+            self.multiThresholdTableWidget.setEnabled(True)
+
+    def signal_on_executeButton_run(self):
+        input_layer = self.dataLayerComboBox.currentLayer()
+        seats_count_field = self.constituencyVoteCountComboBox.currentField()
+
+        parties_fields = self.voteCountComboBox.checkedItems()
+        parties_fields_count = len(parties_fields)
+        if parties_fields_count == 0:
+            iface.messageBar().pushMessage("Błąd", "Zbyt mała liczba wybranych kolumn z liczbą głosów", level=Qgis.Warning)
+            return
+
+        votes_total_by_party = {party_field: 0 for party_field in parties_fields}
+        votes_total = 0
+
+        for party_field in parties_fields:
+            votes_party = input_layer.aggregate(QgsAggregateCalculator.Sum, party_field)[0]
+            votes_total_by_party[party_field] = votes_party
+            votes_total += (votes_party if votes_party is not None else 0)
+
+        threshold = self._execute_calculate_threshold(parties_fields_count)
+        if not threshold:
+            iface.messageBar().pushMessage("Błąd", "Wartość progu wyborczego musi być liczbą całkowitą", level=Qgis.Warning)
+            return
+
+        parties_above_threshold = self._execute_get_parties_above_threshold(threshold, votes_total, votes_total_by_party, parties_fields)
+        if len(parties_above_threshold) == 0:
+            iface.messageBar().pushMessage("Błąd", "Żadna partia nie przekracza podanego progu wyborczego. Ustaw inny próg wyborczy.", level=Qgis.Warning)
+            return
+
+        method = self.methodComboBox.currentIndex()
+        seats_distributor = ElectionCalculatorSeatsDistributor(input_layer, parties_above_threshold, seats_count_field)
+
+        if method == ElectionCalculatorMethod.DHONDT.value:
+            calculation_result = seats_distributor.calculate(seats_distributor.dhondt)
+        elif method == ElectionCalculatorMethod.SAINTE_LAGUE.value:
+            calculation_result = seats_distributor.calculate(seats_distributor.sainte_lague)
+        elif method == ElectionCalculatorMethod.HARE_NIEMEYER.value:
+            calculation_result = seats_distributor.calculate(seats_distributor.hare_niemeyer)
+        else:
+            iface.messageBar().pushMessage("Błąd", "Niepoprawna metoda liczenia mandatów.", level=Qgis.Warning)
+            return
+
+        self._execute_create_output_layer(input_layer, parties_above_threshold, calculation_result)
+
+    def closeEvent(self, event):
+        self.closingPlugin.emit()
+        event.accept()
+
+    def _init_ui(self):
         self.dataLayerComboBox.setFilters(QgsMapLayerProxyModel.VectorLayer)
         self.constituencyVoteCountComboBox.setFilters(QgsFieldProxyModel.Numeric)
 
@@ -69,79 +160,17 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.multiThresholdWidget.setVisible(False)
         self.multiThresholdTableWidget.setEnabled(False)
 
-        # INIT SIGNALS
-        self.dataLayerComboBox.layerChanged.connect(self.on_dataLayerComboBox_layer_changed)
-        self.voteCountComboBox.checkedItemsChanged.connect(self.on_voteCountComboBox_fields_changed)
-        self.thresholdCheckBox.stateChanged.connect(self.on_thresholdCheckBox_check_state_changed)
-        self.groupRadioButtons.idClicked.connect(self.on_radioButton_change_clicked)
+    def _init_signals(self):
+        self.dataLayerComboBox.layerChanged.connect(self.signal_on_dataLayerComboBox_layer_changed)
+        self.voteCountComboBox.checkedItemsChanged.connect(self.signal_on_voteCountComboBox_fields_changed)
+        self.thresholdCheckBox.stateChanged.connect(self.signal_on_thresholdCheckBox_check_state_changed)
+        self.groupRadioButtons.idClicked.connect(self.signal_on_radioButton_change_clicked)
 
-        self.executeButton.pressed.connect(self.on_executeButton_run)
+        self.executeButton.pressed.connect(self.signal_on_executeButton_run)
 
-        self.on_dataLayerComboBox_layer_changed(self.dataLayerComboBox.currentLayer())
+        self.signal_on_dataLayerComboBox_layer_changed(self.dataLayerComboBox.currentLayer())
 
-    # SIGNALS
-    def on_dataLayerComboBox_layer_changed(self, layer):
-        if layer is not None:
-            field_names = layer.fields().names()
-
-            self.voteCountComboBox.clear()
-            self.voteCountComboBox.addItems(field_names)
-            self.constituencyVoteCountComboBox.setLayer(layer)
-
-        else:
-            self.voteCountComboBox.clear()
-            self.constituencyVoteCountComboBox.setLayer(None)
-
-    def on_voteCountComboBox_fields_changed(self, fields):
-        self.multiThresholdTableWidget.clear()
-        self.multiThresholdTableWidget.setRowCount(len(fields))
-        for idx, field in enumerate(fields):
-            self.multiThresholdTableWidget.setItem(idx, 0, QTableWidgetItem(field))
-            self.multiThresholdTableWidget.item(idx, 0).setFlags(Qt.NoItemFlags)
-            self.multiThresholdTableWidget.setItem(idx, 1, QTableWidgetItem('0'))
-
-    def on_thresholdCheckBox_check_state_changed(self, checked):
-        if checked:
-            self.oneThresholdWidget.setEnabled(True)
-            self.oneThresholdWidget.setVisible(True)
-
-            self.multiThresholdWidget.setEnabled(True)
-            self.multiThresholdWidget.setVisible(True)
-        else:
-            self.oneThresholdWidget.setEnabled(False)
-            self.oneThresholdWidget.setVisible(False)
-
-            self.multiThresholdWidget.setEnabled(False)
-            self.multiThresholdWidget.setVisible(False)
-
-    def on_radioButton_change_clicked(self, id: int):
-        if id == 0:
-            self.oneThresholdSpinBox.setEnabled(True)
-            self.multiThresholdTableWidget.setEnabled(False)
-        else:
-            self.oneThresholdSpinBox.setEnabled(False)
-            self.multiThresholdTableWidget.setEnabled(True)
-
-    def on_executeButton_run(self):
-        input_layer = self.dataLayerComboBox.currentLayer()
-
-        votes_total = 0
-
-        parties = self.voteCountComboBox.checkedItems()
-        parties_count = len(parties)
-        if parties_count == 0:
-            iface.messageBar().pushMessage("Błąd", "Zbyt mała liczba wybranych kolumn z liczbą głosów", level=Qgis.Warning)
-            return
-
-        votes_parties = {party: 0 for party in parties}
-
-        for party_field in parties:
-            votes_party = input_layer.aggregate(QgsAggregateCalculator.Sum, party_field)[0]
-            votes_parties[party_field] = votes_party
-
-            votes_total += (votes_party if votes_party is not None else 0)
-
-
+    def _execute_calculate_threshold(self, parties_count: int):
         if self.thresholdCheckBox.isChecked():
             threshold_type = self.groupRadioButtons.checkedId()
             if threshold_type == 0:
@@ -153,52 +182,42 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     try:
                         value = int(self.multiThresholdTableWidget.item(idx, 1).text())
                     except ValueError:
-                        iface.messageBar().pushMessage("Błąd", "Wartość progu wyborczego musi być liczbą całkowitą",
-                                                       level=Qgis.Warning)
-                        return
+                        return None
+
                     thresholds_values.append(value)
 
                 threshold = ('multi', thresholds_values)
         else:
             threshold = ('single', 0)
 
+        return threshold
+
+    def _execute_get_parties_above_threshold(self, threshold, votes_total, votes_total_by_party, parties_fields):
         parties_above_threshold = []
         if threshold[0] == 'single':
-            for current_party, current_votes in votes_parties.items():
+            for current_party, current_votes in votes_total_by_party.items():
 
                 if ((current_votes / votes_total) * 100) >= threshold[1]:
                     parties_above_threshold.append(current_party)
         else:
-            for current_party, current_votes in votes_parties.items():
-                current_threshold_id = parties.index(current_party)
+            for current_party, current_votes in votes_total_by_party.items():
+                current_threshold_id = parties_fields.index(current_party)
                 current_threshold = threshold[1][current_threshold_id]
 
                 if ((current_votes / votes_total) * 100)  >= current_threshold:
                     parties_above_threshold.append(current_party)
 
-        if len(parties_above_threshold) == 0:
-            iface.messageBar().pushMessage("Błąd", "Żadna partia nie przekracza podanego progu wyborczego. Ustaw inny próg wyborczy.",
-                                           level=Qgis.Warning)
+        return parties_above_threshold
 
-        method = self.methodComboBox.currentIndex()
-
-        seats_count_field = self.constituencyVoteCountComboBox.currentField()
-
-        if method == ElectionCalculatorMethod.DHONDT.value:
-            result = method_dhondt(input_layer, parties_above_threshold, seats_count_field)
-        elif method == ElectionCalculatorMethod.SAINTE_LAGUE.value:
-            result = method_sainte_lague(input_layer, parties_above_threshold, seats_count_field)
-        elif method == ElectionCalculatorMethod.HARE_NIEMEYER.value:
-            result = method_hare_niemeyer(input_layer, parties_above_threshold, seats_count_field)
-
+    def _execute_create_output_layer(self, input_layer: QgsMapLayer, parties_above_threshold: list, calculation_result: dict):
         output_layer = QgsVectorLayer(input_layer.geometryType().name, "results_" + input_layer.name(), "memory")
         output_layer.setCrs(input_layer.crs())
         output_provider = output_layer.dataProvider()
 
         new_fields = []
-        for col in parties_above_threshold:
+        for party_column in parties_above_threshold:
             new_fields.append(
-                QgsField(f"RESULTS_{col}", QVariant.Int)
+                QgsField(f"RESULTS_{party_column}", QVariant.Int)
             )
 
         output_provider.addAttributes(list(input_layer.fields()) + new_fields)
@@ -210,12 +229,11 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             output_feature.setFields(output_layer.fields())
             output_feature.setGeometry(feature.geometry())
 
-
             attributes = []
             for attr in feature.attributes():
                 attributes.append(attr)
 
-            output_results = result[feature.id()]
+            output_results = calculation_result[feature.id()]
             for i in range(0, len(parties_above_threshold)):
                 try:
                     attributes.append(output_results[i])
@@ -228,7 +246,3 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         output_layer.dataProvider().addFeatures(output_features)
 
         QgsProject.instance().addMapLayer(output_layer)
-
-    def closeEvent(self, event):
-        self.closingPlugin.emit()
-        event.accept()
