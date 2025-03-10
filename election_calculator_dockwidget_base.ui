@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>316</width>
+    <width>332</width>
     <height>635</height>
    </rect>
   </property>
@@ -21,14 +21,14 @@
     <item row="2" column="0">
      <widget class="QLabel" name="voteCountLabel">
       <property name="text">
-       <string>Kolumny z liczbą głosów poszczególnych partii</string>
+       <string>Columns with the number of votes of each party</string>
       </property>
      </widget>
     </item>
     <item row="0" column="0">
      <widget class="QLabel" name="dataLayerLabel">
       <property name="text">
-       <string>Warstwa z danymi</string>
+       <string>Vector layer of the constituences</string>
       </property>
      </widget>
     </item>
@@ -40,7 +40,7 @@
          <item>
           <widget class="QRadioButton" name="oneThresholdRadioButton">
            <property name="text">
-            <string>Jeden próg wyborczy</string>
+            <string>One electoral threshold</string>
            </property>
           </widget>
          </item>
@@ -56,12 +56,15 @@
          <item>
           <widget class="QRadioButton" name="multiThresholdRadioButton">
            <property name="text">
-            <string>Zróżnicowane progi wyborcze (koalicje, mniejszości nar.)</string>
+            <string>Multiple electoral thresholds</string>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QTableWidget" name="multiThresholdTableWidget">
+           <property name="showDropIndicator" stdset="0">
+            <bool>true</bool>
+           </property>
            <property name="columnCount">
             <number>2</number>
            </property>
@@ -70,12 +73,12 @@
            </attribute>
            <column>
             <property name="text">
-             <string>Pole z głosami</string>
+             <string>Field</string>
             </property>
            </column>
            <column>
             <property name="text">
-             <string>Wartość progu</string>
+             <string>Threshold value</string>
             </property>
            </column>
           </widget>
@@ -94,7 +97,7 @@
     <item row="6" column="0">
      <widget class="QLabel" name="methodLabel">
       <property name="text">
-       <string>Metoda obliczania mandatów</string>
+       <string>Method of calculating seats</string>
       </property>
      </widget>
     </item>
@@ -102,17 +105,17 @@
      <widget class="QComboBox" name="methodComboBox">
       <item>
        <property name="text">
-        <string>Metoda D’Hondta</string>
+        <string>D’Hondt method</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string>Metoda Sainte-Laguë</string>
+        <string>Sainte-Laguë method</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string>Metoda Hare’a-Niemeyera</string>
+        <string>Hare’a-Niemeyer method</string>
        </property>
       </item>
      </widget>
@@ -120,7 +123,7 @@
     <item row="19" column="0">
      <widget class="QPushButton" name="executeButton">
       <property name="text">
-       <string>Uruchom</string>
+       <string>Run</string>
       </property>
      </widget>
     </item>
@@ -129,7 +132,7 @@
       <item>
        <widget class="QCheckBox" name="thresholdCheckBox">
         <property name="text">
-         <string>Próg wyborczy</string>
+         <string>Use electoral threshold</string>
         </property>
        </widget>
       </item>
@@ -151,7 +154,7 @@
     <item row="4" column="0">
      <widget class="QLabel" name="constituencyVoteCountLabel">
       <property name="text">
-       <string>Kolumna z liczbą mandatów w okręgu</string>
+       <string>Column with the number of seats in the constituency</string>
       </property>
      </widget>
     </item>

@@ -55,7 +55,7 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def signal_on_dataLayerComboBox_layer_changed(self, layer):
         if layer is not None:
-            field_names = layer.fields().names()
+            field_names = [f.name() for f in layer.fields() if f.typeName() in ["Integer", "Integer64"]]
 
             self.voteCountComboBox.clear()
             self.voteCountComboBox.addItems(field_names)
@@ -102,7 +102,7 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         parties_fields = self.voteCountComboBox.checkedItems()
         parties_fields_count = len(parties_fields)
         if parties_fields_count == 0:
-            iface.messageBar().pushMessage("Błąd", "Zbyt mała liczba wybranych kolumn z liczbą głosów", level=Qgis.Warning)
+            iface.messageBar().pushMessage("Warning", "Too few selected columns with number of votes", level=Qgis.Warning)
             return
 
         votes_total_by_party = {party_field: 0 for party_field in parties_fields}
@@ -115,12 +115,12 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         threshold = self._execute_calculate_threshold(parties_fields_count)
         if not threshold:
-            iface.messageBar().pushMessage("Błąd", "Wartość progu wyborczego musi być liczbą całkowitą", level=Qgis.Warning)
+            iface.messageBar().pushMessage("Warning", "The value of the election threshold must be a integer", level=Qgis.Warning)
             return
 
         parties_above_threshold = self._execute_get_parties_above_threshold(threshold, votes_total, votes_total_by_party, parties_fields)
         if len(parties_above_threshold) == 0:
-            iface.messageBar().pushMessage("Błąd", "Żadna partia nie przekracza podanego progu wyborczego. Ustaw inny próg wyborczy.", level=Qgis.Warning)
+            iface.messageBar().pushMessage("Warning", "No party exceeds the stated electoral threshold. Set a different electoral threshold", level=Qgis.Warning)
             return
 
         method = self.methodComboBox.currentIndex()
@@ -133,7 +133,11 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         elif method == ElectionCalculatorMethod.HARE_NIEMEYER.value:
             calculation_result = seats_distributor.calculate(seats_distributor.hare_niemeyer)
         else:
-            iface.messageBar().pushMessage("Błąd", "Niepoprawna metoda liczenia mandatów.", level=Qgis.Warning)
+            iface.messageBar().pushMessage("Warning", "Incorrect method of counting seats", level=Qgis.Warning)
+            return
+
+        if calculation_result is None:
+            iface.messageBar().pushMessage("Warning", "The number of seats to be distributed in each constituence must be at least 1", level=Qgis.Warning)
             return
 
         self._execute_create_output_layer(input_layer, parties_above_threshold, calculation_result)
@@ -156,6 +160,7 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.oneThresholdSpinBox.setEnabled(True)
 
         self.multiThresholdTableWidget.clear()
+        self.multiThresholdTableWidget.setHorizontalHeaderLabels(["Field", "Threshold values"])
         self.multiThresholdWidget.setEnabled(False)
         self.multiThresholdWidget.setVisible(False)
         self.multiThresholdTableWidget.setEnabled(False)

@@ -49,21 +49,9 @@ class ElectionCalculator:
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
 
-        # initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
-        locale_path = os.path.join(
-            self.plugin_dir,
-            'i18n',
-            'ElectionCalculator_{}.qm'.format(locale))
-
-        if os.path.exists(locale_path):
-            self.translator = QTranslator()
-            self.translator.load(locale_path)
-            QCoreApplication.installTranslator(self.translator)
-
         # Declare instance attributes
         self.actions = []
-        self.menu = self.tr(u'&Election Calculator')
+        self.menu = u'&Election Calculator'
         # TODO: We are going to let the user set this up in a future iteration
         self.toolbar = self.iface.addToolBar(u'ElectionCalculator')
         self.toolbar.setObjectName(u'ElectionCalculator')
@@ -72,22 +60,6 @@ class ElectionCalculator:
 
         self.pluginIsActive = False
         self.dockwidget = None
-
-
-    # noinspection PyMethodMayBeStatic
-    def tr(self, message):
-        """Get the translation for a string using Qt translation API.
-
-        We implement this ourselves since we do not inherit QObject.
-
-        :param message: String for translation.
-        :type message: str, QString
-
-        :returns: Translated version of message.
-        :rtype: QString
-        """
-        # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
-        return QCoreApplication.translate('ElectionCalculator', message)
 
 
     def add_action(
@@ -170,7 +142,7 @@ class ElectionCalculator:
         icon_path = ':/plugins/election_calculator/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u''),
+            text=u'',
             callback=self.run,
             parent=self.iface.mainWindow())
 
@@ -200,7 +172,7 @@ class ElectionCalculator:
 
         for action in self.actions:
             self.iface.removePluginMenu(
-                self.tr(u'&Election Calculator'),
+                u'&Election Calculator',
                 action)
             self.iface.removeToolBarIcon(action)
         # remove the toolbar
