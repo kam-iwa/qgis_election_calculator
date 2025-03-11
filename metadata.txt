@@ -6,14 +6,14 @@
 name=Election Calculator
 qgisMinimumVersion=3.0
 description=Election calculator plugin with different electoral systems
-version=0.1
+version=1.0
 author=Kamil Iwaniuk
 email=iwaniukkamil@gmail.com
 
 about=Election calculator plugin with different electoral systems.
 
-tracker=http://bugs
-repository=http://repo
+tracker=https://github.com/kam-iwa/qgis_election_calculator/issues
+repository=https://github.com/kam-iwa/qgis_election_calculator
 # End of mandatory metadata
 
 # Recommended items:
