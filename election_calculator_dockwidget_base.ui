@@ -115,7 +115,12 @@
       </item>
       <item>
        <property name="text">
-        <string>Hare’a-Niemeyer method</string>
+        <string>Sainte-Laguë (Scandinavian) method</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Hare-Niemeyer method</string>
        </property>
       </item>
      </widget>

@@ -33,56 +33,40 @@ class ElectionCalculatorSeatsDistributor:
     def sainte_lague(self, seats: int, votes: list):
         return self._calculate_seats_by_quotients(seats, votes, 2)
 
+    def sainte_lague_scandinavian(self, seats: int, votes: list):
+        return self._calculate_seats_by_quotients(seats, votes, 2, 0.4)
+
     def hare_niemeyer(self, seats: int, votes: list):
         return self._calculate_seats_by_remainders(seats, votes)
 
-    def _calculate_seats_by_quotients(self, seats: int, votes: list, step: int = 1):
-        quotients = []
-        for i in range(1, seats+1, step):
-            quotient = []
+    def _calculate_seats_by_quotients(self, seats: int, votes: list, step: int = 1, first_quotient_modifier: float = 0.0):
+        votes_idx = [i for i in range(0, len(votes))]
 
-            for j in votes:
-                if isinstance(j, int):
-                    quotient.append(j / i)
-                else:
-                    quotient.append(-1)
+        results = {party: 0 for party in votes_idx}
+        divisors = {party: 1 + first_quotient_modifier for party in votes_idx}
 
-            quotients.append(quotient)
+        for _ in range(seats):
+            best_party = max(votes_idx, key=lambda p: votes[p] / divisors[p] if isinstance(votes[p], int) else -1 / divisors[p])
+            results[best_party] += 1
+            if divisors[best_party] == 1 + first_quotient_modifier:
+                divisors[best_party] += (1 + step) - (1 + first_quotient_modifier)
+            else:
+                divisors[best_party] += step
 
-        quotient_array = np.array(quotients)
-        ix, jx = np.unravel_index(quotient_array.argsort(axis=None), quotient_array.shape)
-
-        quotient_indexes = list(zip(ix, jx))
-        quotient_indexes.reverse()
-        seats_quotient_indexes = quotient_indexes[0:seats]
-
-        result = {}
-        for _, y in seats_quotient_indexes:
-            result[y] = result.get(y, 0) + 1
-
-        return result
+        return results
 
     def _calculate_seats_by_remainders(self, seats: int, votes: list):
-        result = {}
-
-        seats_assigned = 0
-        seats_remainders = []
-
         votes_without_nulls = [v for v in votes if v != NULL]
-        for idx, votes in enumerate(votes):
-            if not isinstance(votes, int):
-                votes = 0
+        total_votes = sum(votes_without_nulls)
 
-            seats_ = ((votes * seats) / sum(votes_without_nulls))
-            seats_assigned += int(seats_)
+        quotas = {party: (votes_without_nulls[party] / total_votes) * seats for party in votes}
+        results = {party: int(quotas[party]) for party in votes}
+        remaining_seats = seats - sum(results.values())
 
-            result[idx] = int(seats_)
-            seats_remainders.append(seats_ - int(seats_))
+        fractional_parts = sorted(((party, quotas[party] - results[party]) for party in votes), key=lambda x: x[1],
+                                  reverse=True)
 
-        while seats_assigned < seats:
-            idx = seats_remainders.index(max(seats_remainders))
-            result[idx] += 1
-            seats_remainders.pop(idx)
-            seats_assigned += 1
+        for i in range(remaining_seats):
+            results[fractional_parts[i][0]] += 1
 
-        return result
+        return results

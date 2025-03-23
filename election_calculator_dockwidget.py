@@ -37,10 +37,13 @@ from .election_calculator_methods import ElectionCalculatorSeatsDistributor
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'election_calculator_dockwidget_base.ui'))
 
+
 class ElectionCalculatorMethod(Enum):
     DHONDT = 0
     SAINTE_LAGUE = 1
-    HARE_NIEMEYER = 2
+    SAINTE_LAGUE_SCANDINAVIAN = 2
+    HARE_NIEMEYER = 3
+
 
 class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
@@ -127,9 +130,11 @@ class ElectionCalculatorDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         seats_distributor = ElectionCalculatorSeatsDistributor(input_layer, parties_above_threshold, seats_count_field)
 
         if method == ElectionCalculatorMethod.DHONDT.value:
-            calculation_result = seats_distributor.calculate(seats_distributor.dhondt)
+            calculation_result = seats_distributor.calculate(seats_distributor.dhondt2)
         elif method == ElectionCalculatorMethod.SAINTE_LAGUE.value:
             calculation_result = seats_distributor.calculate(seats_distributor.sainte_lague)
+        elif method == ElectionCalculatorMethod.SAINTE_LAGUE_SCANDINAVIAN.value:
+            calculation_result = seats_distributor.calculate(seats_distributor.sainte_lague_scandinavian)
         elif method == ElectionCalculatorMethod.HARE_NIEMEYER.value:
             calculation_result = seats_distributor.calculate(seats_distributor.hare_niemeyer)
         else:
